@@ -95,8 +95,8 @@ fun DrawScope.Layer(
     sectionCenter: Float,
     sectionHeight: Float,
     radius: Float,
-    neuronArray: Array<Float>,
-    weightsArray: Array<Array<Float>>,
+    neuronArray: Array<Double>,
+    weightsArray: Array<Array<Double>>,
     nextCenter: Float,
 ) {
     val heightOfNeuronArea = sectionHeight / neuronArray.count()

@@ -6,7 +6,8 @@ fun learningOneSymbolImage(symbol: Int, parceptron: Parseptron) {
 
     for (p in 1..1000) {
 
-        val image = ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - training\\$symbol\\p ($p).jpg"))
+        val image =
+            ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - training\\$symbol\\p ($p).jpg"))
         parceptron.learning(image, symbol)
 
         println("learning symbol $symbol example $p from 1000")
@@ -22,7 +23,7 @@ fun learningImageApplyGradientEachStepWithIncreasingAccuracy() {
     val parceptron = Parseptron()
 
     val examplesCount = 2000
-    val rounds = 3
+    val rounds = 2
 
     repeat(rounds) { round ->
         for (i in 0..9) {
@@ -49,9 +50,8 @@ fun learningImageApplyGradientEachStepWithIncreasingAccuracy() {
                     } else {
                         true
                     }
-                }.none {
-                    parceptron.outputLayer.max() / (10 * round) < it
-                } && parceptron.outputLayer.max() > 0.8
+                }.filter { parceptron.outputLayer.max() / (10 * round) < it }
+                    .isNotEmpty() && parceptron.outputLayer.max() > 0.8
 
                 if (result == i && secondCondition) {
                     println("break: $p")
@@ -71,7 +71,7 @@ fun learningApplyAvarageGradientWithIncreasingAccuracy() {
     val parceptron = Parseptron()
 
     val examplesCount = 2000
-    val rounds = 5
+    val rounds = 2
 
     repeat(rounds) { round ->
 
@@ -83,38 +83,39 @@ fun learningApplyAvarageGradientWithIncreasingAccuracy() {
                     println("learning example $p")
                 }
 
-                val image =
-                    ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - training\\$i\\p ($p).jpg"))
+                val image = ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - training\\$i\\p ($p).jpg"))
 
                 parceptron.learning(image, i)
+                println("outputs ${parceptron.outputLayer.toList()}")
             }
 
             parceptron.applyAllGradients()
 
-            for (i in 0..9) {
-                val imageTest =
-                    ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - testing\\$i\\p (1).jpg"))
-
-                val result = parceptron.recognize(imageTest)
-
-                val secondCondition = parceptron.outputLayer.toList().filter {
-                    if (it == parceptron.outputLayer.max()) {
-                        false
-                    } else {
-                        true
-                    }
-                }.none {
-                    parceptron.outputLayer.max() / 10 < it
-                } && parceptron.outputLayer.max() > 0.8
-
-                println("testing result: $i to $result && ${parceptron.outputLayer.toList()}")
-
-                if (result == i && secondCondition) {
-//                    println("break: $p")
-//                    break
-                }
-            }
+//            for (i in 0..9) {
+//                val imageTest =
+//                    ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - testing\\$i\\p (1).jpg"))
+//
+//                val result = parceptron.recognize(imageTest)
+//
+//                val secondCondition = parceptron.outputLayer.toList().filter {
+//                    if (it == parceptron.outputLayer.max()) {
+//                        false
+//                    } else {
+//                        true
+//                    }
+//                }.none {
+//                    parceptron.outputLayer.max() / 10 < it
+//                } && parceptron.outputLayer.max() > 0.8
+//
+//                println("testing result: $i to $result && ${parceptron.outputLayer.toList()}")
+//
+//                if (result == i && secondCondition) {
+////                    println("break: $p")
+////                    break
+//                }
+//            }
         }
+        testing(parceptron)
     }
 
 //    var testingErrorCount = 0
@@ -320,7 +321,7 @@ fun getOutputCondition(
 
 private fun testing(
     parceptron: Parseptron
-){
+) {
 
     var testingErrorCount = 0
     for (i in 0..9) {
@@ -329,7 +330,8 @@ private fun testing(
 
         for (p in 1..320) {
 
-            val image = ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - testing\\$i\\p ($p).jpg"))
+            val image =
+                ImageIO.read(File("D:\\IntelliJ\\parceptron-data-set\\dataset\\MNIST - JPG - testing\\$i\\p ($p).jpg"))
 
             val result = parceptron.recognize(image)
 
