@@ -1,7 +1,6 @@
 package parseptron
 
 import java.awt.image.BufferedImage
-import kotlin.math.absoluteValue
 import kotlin.math.pow
 import kotlin.random.Random
 
@@ -51,7 +50,7 @@ class Parseptron(
         val vector = mutableListOf<Double>()
 
         for (j in 0 until height) {
-            val value = getRandom() / 10.0
+            val value = getRandom()
 
             vector.add(value)
         }
@@ -65,7 +64,7 @@ class Parseptron(
         for (i in 0 until height) {
             val row = mutableListOf<Double>()
             for (j in 0 until width) {
-                val weight = getRandom() / 10.0
+                val weight = getRandom()
 
                 row.add(weight)
             }
@@ -75,7 +74,15 @@ class Parseptron(
         return matrix.toTypedArray()
     }
 
-    private fun getRandom() = Random.nextInt(10)
+    private fun getRandom(): Double {
+        val numberDigits = Random.nextInt(10) / 10.0
+        val sign = if ((Random.nextInt(10) / 10.0) > 0.5) -1 else 1
+        return Random.nextInt(10) / when {
+            numberDigits < 0.3 -> 10.0
+            numberDigits in 0.3..0.6 -> 1000.0
+            else -> 100000.0
+        } * sign
+    }
 
     fun recognize(image: BufferedImage): Int {
         fillInputLayer(image)
@@ -90,7 +97,7 @@ class Parseptron(
             for (y in 0 until image.height) {
                 for (x in 0 until image.width) {
                     val color = image.getRGB(x, y)
-                    inputLayerValues[inputCounter] = getPixelValue(color)
+                    inputLayerValues[inputCounter] = if (getPixelValue(color) > 0.3) 1.0 else 0.0
                     inputCounter++
                 }
             }
@@ -148,7 +155,7 @@ class Parseptron(
         )
 
         nextLayer.forEachIndexed { index, _ ->
-            val currentSumValue = vectorOfSums[index].toDouble()
+            val currentSumValue = vectorOfSums[index]
 
             nextLayer[index] = activationFun(currentSumValue)
         }
@@ -169,11 +176,10 @@ class Parseptron(
             var weightedSum = 0.0
 
             row.forEachIndexed { index, weight ->
-                val previousNeuronValue = layer[index]
+                val neuronValue = layer[index]
 
-                weightedSum += previousNeuronValue * weight
+                weightedSum += neuronValue * weight
             }
-
             vectorOfSums.add(weightedSum + layerOffsets[index]) //Добавлений будет как высота матрицы весов что равно высоте следующего слоя
         }
 
@@ -457,14 +463,14 @@ class Parseptron(
 
             row.forEachIndexed { wightIndex, weight ->
                 row[wightIndex] =
-                    row[wightIndex] + LEARNING_SPEED*(-gradientOfWeights[gradientCounter]) // Изменение веса в соответсвии с градиентом
+                    row[wightIndex] + LEARNING_SPEED * (-gradientOfWeights[gradientCounter]) // Изменение веса в соответсвии с градиентом
             }
             gradientCounter++
         }
 
         layerOffsets.forEachIndexed { index, offset ->
             layerOffsets[index] =
-                layerOffsets[index] + LEARNING_SPEED*(-gradientOfOffsets[index]) // Изменение смещения в соответсвии с градиентом
+                layerOffsets[index] + LEARNING_SPEED * (-gradientOfOffsets[index]) // Изменение смещения в соответсвии с градиентом
         }
     }
 
