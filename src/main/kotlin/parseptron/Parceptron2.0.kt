@@ -4,7 +4,7 @@ import java.awt.image.BufferedImage
 import kotlin.math.pow
 import kotlin.random.Random
 
-class Parseptron(
+class Parceptron2(
     inputSize: Int = INPUTS_SIZE,
     firstLayerSize: Int = FIRST_LAYER_SIZE,
     secondLayerSize: Int = SECOND_LAYER_SIZE,
@@ -19,14 +19,13 @@ class Parseptron(
         const val SECOND_LAYER_SIZE = 16
         const val OUTPUT_SIZE = 10
 
-        const val LEARNING_SPEED = 1f
-
-        val VALUE_RANGE = 0..10
+        const val COUNT_SUMMED_GRADIENTS = 100
+        const val LEARNING_SPEED = 0.001f
     }
 
-    val _gradientVectorSOWeights = mutableListOf<Double>()
-    val _gradientVectorFSWeights = mutableListOf<Double>()
-    val _gradientVectorIFWeights = mutableListOf<Double>()
+    val _gradientVectorSOWeights = mutableListOf<MutableList<Double>>()
+    val _gradientVectorFSWeights = mutableListOf<MutableList<Double>>()
+    val _gradientVectorIFWeights = mutableListOf<MutableList<Double>>()
     val _gradientVectorSOOffsets = mutableListOf<Double>()
     val _gradientVectorFSOffsets = mutableListOf<Double>()
     val _gradientVectorIFOffsets = mutableListOf<Double>()
@@ -77,11 +76,7 @@ class Parseptron(
     private fun getRandom(): Double {
         val numberDigits = Random.nextInt(10) / 10.0
         val sign = if ((Random.nextInt(10) / 10.0) > 0.5) -1 else 1
-        return Random.nextInt(10) / when {
-            numberDigits < 0.3 -> 100.0
-            numberDigits in 0.3..0.6 -> 1000.0
-            else -> 10000.0
-        } * sign
+        return Random.nextInt(10) * sign / 10.0
     }
 
     fun recognize(image: BufferedImage): Int {
@@ -213,9 +208,6 @@ class Parseptron(
     }
 
     private fun calculateBackwardPass(expectedOutputs: Array<Double>) {
-        //Расчитать градиент для весов между вторым и выходм слоем
-        //Расчитать новые веса между вторым и выходным слоями
-
         val vectorOfPreActivationValues = getVectorOfPreActivationValues(
             // высота вектора = высоте матрицы весов переданых для расчета
             layer = secondLayer,
@@ -223,55 +215,62 @@ class Parseptron(
             layerOffsets = secondLayerOffsetsValues,
         )
 
-        val gradientVectorSecondOutputWeights = mutableListOf<Double>()
+        val gradientOut = mutableListOf<Double>()
 
-        secondLayerWeightsValues.forEachIndexed { heightIndex, row ->
-            row.forEachIndexed { wightIndex, weight ->
+        outputLayer.forEachIndexed { index, output ->
 
-                val derivativeErrorValue = 2 * (outputLayer[heightIndex] - expectedOutputs[heightIndex])
+            val derivativeErrorValue = 2 * (outputLayer[index] - expectedOutputs[index])
 
-                val tiedNeuron = secondLayer[wightIndex] // wightIndex - размерность предыдущего слоя
+            val preActivationValue = vectorOfPreActivationValues[index]
+            val derivativeOfActivation = gradientFun(preActivationValue)
 
-                val preActivationValue = vectorOfPreActivationValues[heightIndex]
-                val derivativeOfActivation =
-                    gradientFun(preActivationValue) //heightIndex используется для взятия значений из векторов размером выходного слоя
+            val gradientValue = derivativeErrorValue * derivativeOfActivation
 
-                val gradientValue = derivativeErrorValue * tiedNeuron * derivativeOfActivation
-
-                gradientVectorSecondOutputWeights.add(gradientValue)
-            }
+            gradientOut.add(gradientValue)
         }
 
-        val gradientVectorSecondOutputOffsets = mutableListOf<Double>()
-
-        secondLayerOffsetsValues.forEachIndexed { heightIndex, offset -> // heightIndex - высота вектора смещений совпадает с высотой вектора значений нейронов в след слое
-            val derivativeErrorValue = 2 * (outputLayer[heightIndex] - expectedOutputs[heightIndex])
-            val derivativeOfActivation = gradientFun(vectorOfPreActivationValues[heightIndex])
-
-            val gradientValue = derivativeErrorValue * derivativeOfActivation //Значение dZ / db = 1
-
-            gradientVectorSecondOutputOffsets.add(gradientValue)
-        }
-
-        val (gradientVectorFirstSecondWeights, gradientVectorFirstSecondOffsets) = getWeightAndOffsetsGradients(
+        val derivativeActivationVectorH2 = getVectorOfPreActivationValues(
             layer = firstLayer,
             layerWeights = firstLayerWeightsValues,
             layerOffsets = firstLayerOffsetsValues,
-            nextLayer = secondLayer,
-            nextLayerWeights = secondLayerWeightsValues,
-            gradientOfNextWeightsLayer = gradientVectorSecondOutputWeights.toTypedArray(),
-        )
+        ).map { gradientFun(it) }
 
-        val (gradientVectorInputFirstWeights, gradientVectorInputFirstOffsets) = getWeightAndOffsetsGradients(
+        val gradientH2 =
+            matrixMultiplication(secondLayerWeightsValues.transposition(), gradientOut).vectorWiseMultiplication(
+                derivativeActivationVectorH2
+            )
+
+        val derivativeActivationVectorH1 = getVectorOfPreActivationValues(
             layer = inputLayerValues,
             layerWeights = inputWeightsValues,
             layerOffsets = inputOffsetsValues,
-            nextLayer = firstLayer,
-            nextLayerWeights = firstLayerWeightsValues,
-            gradientOfNextWeightsLayer = gradientVectorFirstSecondWeights.toTypedArray(),
+        ).map { gradientFun(it) }
+
+        val gradientH1 =
+            matrixMultiplication(firstLayerWeightsValues.transposition(), gradientH2).vectorWiseMultiplication(
+                derivativeActivationVectorH1
+            )
+
+        //Составляем градиенты смещений и весов
+
+        val (gradientVectorSecondOutputWeights, gradientVectorSecondOutputOffsets) = getWeightAndOffsetsGradients(
+            layerGradient = gradientOut,
+            nextLayer = secondLayer,
         )
 
-        addToGradient(
+        val (gradientVectorFirstSecondWeights, gradientVectorFirstSecondOffsets) = getWeightAndOffsetsGradients(
+            layerGradient = gradientH2,
+            nextLayer = firstLayer,
+        )
+
+        val (gradientVectorInputFirstWeights, gradientVectorInputFirstOffsets) = getWeightAndOffsetsGradients(
+            layerGradient = gradientH1,
+            nextLayer = inputLayerValues,
+        )
+
+        // Складываем градиенты в общую кучу
+
+        addToGradient2(
             overallGradient = _gradientVectorSOWeights,
             exampleGradient = gradientVectorSecondOutputWeights
         )
@@ -281,7 +280,7 @@ class Parseptron(
             exampleGradient = gradientVectorSecondOutputOffsets
         )
 
-        addToGradient(
+        addToGradient2(
             overallGradient = _gradientVectorFSWeights,
             exampleGradient = gradientVectorFirstSecondWeights
         )
@@ -291,7 +290,7 @@ class Parseptron(
             exampleGradient = gradientVectorFirstSecondOffsets
         )
 
-        addToGradient(
+        addToGradient2(
             overallGradient = _gradientVectorIFWeights,
             exampleGradient = gradientVectorInputFirstWeights
         )
@@ -306,122 +305,56 @@ class Parseptron(
      * Расчет градиента на основе предыдущего
      */
     private fun getWeightAndOffsetsGradients(
-        layer: Array<Double>,
-        layerWeights: Array<Array<Double>>,
-        layerOffsets: Array<Double>,
+        layerGradient: List<Double>,
         nextLayer: Array<Double>,
-        nextLayerWeights: Array<Array<Double>>,
-        gradientOfNextWeightsLayer: Array<Double>
-    ): Pair<List<Double>, List<Double>> {
+    ): Pair<List<List<Double>>, List<Double>> {
+        val weightsGradient = mutableListOf<MutableList<Double>>()
 
-        // Расчет градиентов для первого слоя
-        val vectorOfPreActivationValues = getVectorOfPreActivationValues(
-            // высота вектора = высоте матрицы весов переданых для расчета
-            layer = layer,
-            layerWeights = layerWeights,
-            layerOffsets = layerOffsets,
-        )
+        for (h in layerGradient.indices) {
+            val row = mutableListOf<Double>()
 
-        val gradientVectorCurrentNextWeights = mutableListOf<Double>()
-
-        layerWeights.forEachIndexed { heightIndex, row ->
-            row.forEachIndexed { wightIndex, weight ->
-
-                //Testing val stringBuilder = StringBuilder()
-
-                var dC_By_daprev = 0.0
-
-                //Указатель на индекс для расчитаного значения градиента в gradientVectorSecondOutputWeights, расчитанного для secondLayer[wightIndex]
-                val gradientMatrix = mutableListOf<MutableList<Double>>()
-                var gradientVectorCounter = 0
-
-                for (h in nextLayerWeights.indices) {
-                    val line = mutableListOf<Double>()
-
-                    for (w in 0 until nextLayerWeights[0].size) {
-
-                        line.add(gradientOfNextWeightsLayer[gradientVectorCounter])
-                        gradientVectorCounter++
-                    }
-
-                    gradientMatrix.add(line)
-                }
-
-                // Смотреть появснение п1
-                for (h in nextLayerWeights.indices) {
-
-                    val tiedNeuron = nextLayer[heightIndex]
-                    val prevWeight = nextLayerWeights[h][heightIndex]
-
-                    dC_By_daprev += gradientMatrix[h][heightIndex] / tiedNeuron * prevWeight
-
-                    //stringBuilder.append("${gradientMatrix[h][heightIndex]} / $tiedNeuron * $prevWeight +")
-                }
-
-                val derivativeOfActivation =
-                    gradientFun(vectorOfPreActivationValues[heightIndex]) //heightIndex используется для взятия значений из векторов размером выходного слоя
-                val tiedNeuron = layer[wightIndex] // an-2
-
-                //println("gradientSum $dC_By_daprev = $stringBuilder")
-
-                val gradientValue = dC_By_daprev * tiedNeuron * derivativeOfActivation
-
-                gradientVectorCurrentNextWeights.add(gradientValue)
-            }
-        }
-
-        val gradientVectorCurrentNextOffsets = mutableListOf<Double>()
-
-        layerOffsets.forEachIndexed { heightIndex, offset ->
-
-            var dC_By_daprev = 0.0
-
-            //Указатель на индекс для расчитаного значения градиента в gradientVectorSecondOutputWeights, расчитанного для secondLayer[wightIndex]
-            var counter = 0
-
-            nextLayerWeights.forEachIndexed { _, row ->
-                val tiedNeuron = nextLayer[heightIndex]
-                val prevWeight = row[heightIndex]
-
-                row.forEachIndexed { index, pw ->
-
-                    //TODO Если не будет работать то грешить на это место
-                    if (pw == prevWeight) { // Эта операция нужна чтобы исключить из суммы произвдные ошибки по нейронам не связанным с tiedNeuron
-                        dC_By_daprev += gradientOfNextWeightsLayer[counter] / tiedNeuron * prevWeight
-                    }
-
-                    counter++
-                }
+            for (w in nextLayer.indices) {
+                row.add(layerGradient[h] * nextLayer[w])
             }
 
-            val derivativeOfActivation =
-                gradientFun(vectorOfPreActivationValues[heightIndex]) //heightIndex используется для взятия значений из векторов размером выходного слоя
-
-            val gradientValue = dC_By_daprev * derivativeOfActivation
-
-            gradientVectorCurrentNextOffsets.add(gradientValue)
+            weightsGradient.add(row)
         }
 
-        return gradientVectorCurrentNextWeights to gradientVectorCurrentNextOffsets
+        return weightsGradient to layerGradient
     }
 
     /**
      * Добавление в общий градиент
      */
+
     fun addToGradient(
         overallGradient: MutableList<Double>,
         exampleGradient: List<Double>
     ) {
-        val max = exampleGradient.max()
-        val min = exampleGradient.min()
-        val border = max - ((max - min) / 4 * 1)
-        val filtredExampleGradient = exampleGradient//.map { if (it.absoluteValue < border.absoluteValue) 0f else it }
-
         if (overallGradient.isEmpty()) {
-            overallGradient.addAll(filtredExampleGradient)
+            overallGradient.addAll(exampleGradient)
         } else {
             overallGradient.mapIndexed { index, value ->
-                value + filtredExampleGradient[index]
+                if (exampleGradient[index] == 0.0) {
+                    value
+                } else {
+                    value + exampleGradient[index]
+                }
+            }
+        }
+    }
+
+    fun addToGradient2(
+        overallGradient: MutableList<MutableList<Double>>,
+        exampleGradient: List<List<Double>>
+    ) {
+        if (overallGradient.isEmpty()) {
+            exampleGradient.forEach { overallGradient.add(it.toMutableList()) }
+        } else {
+            overallGradient.mapIndexed { h, row ->
+                row.mapIndexed { w, value ->
+                    exampleGradient[h][w] + value
+                }
             }
         }
     }
@@ -431,21 +364,21 @@ class Parseptron(
         applyGradient(
             layerWeights = secondLayerWeightsValues,
             layerOffsets = secondLayerOffsetsValues,
-            gradientOfWeights = _gradientVectorSOWeights.toTypedArray(),
+            gradientOfWeights = _gradientVectorSOWeights,
             gradientOfOffsets = _gradientVectorSOOffsets.toTypedArray()
         )
 
         applyGradient(
             layerWeights = firstLayerWeightsValues,
             layerOffsets = firstLayerOffsetsValues,
-            gradientOfWeights = _gradientVectorFSWeights.toTypedArray(),
+            gradientOfWeights = _gradientVectorFSWeights,
             gradientOfOffsets = _gradientVectorFSOffsets.toTypedArray()
         )
 
         applyGradient(
             layerWeights = inputWeightsValues,
             layerOffsets = inputOffsetsValues,
-            gradientOfWeights = _gradientVectorIFWeights.toTypedArray(),
+            gradientOfWeights = _gradientVectorIFWeights,
             gradientOfOffsets = _gradientVectorIFOffsets.toTypedArray()
         )
 
@@ -463,23 +396,21 @@ class Parseptron(
     private fun applyGradient(
         layerWeights: Array<Array<Double>>,
         layerOffsets: Array<Double>,
-        gradientOfWeights: Array<Double>,
+        gradientOfWeights: List<List<Double>>,
         gradientOfOffsets: Array<Double>,
     ) {
-        var gradientCounter = 0
-
+        // Делим на 100 потому что столько было сложено градиентов
         layerWeights.forEachIndexed { heightIndex, row ->
 
             row.forEachIndexed { wightIndex, weight ->
                 row[wightIndex] =
-                    row[wightIndex] + LEARNING_SPEED * (-gradientOfWeights[gradientCounter] / 100) // Изменение веса в соответсвии с градиентом
+                    row[wightIndex] + LEARNING_SPEED * (-gradientOfWeights[heightIndex][wightIndex] / COUNT_SUMMED_GRADIENTS) // Изменение веса в соответсвии с градиентом
             }
-            gradientCounter++
         }
 
         layerOffsets.forEachIndexed { index, offset ->
             layerOffsets[index] =
-                layerOffsets[index] + LEARNING_SPEED * (-gradientOfOffsets[index] / 100) // Изменение смещения в соответсвии с градиентом
+                layerOffsets[index] + LEARNING_SPEED * (-gradientOfOffsets[index] / COUNT_SUMMED_GRADIENTS) // Изменение смещения в соответсвии с градиентом
         }
     }
 

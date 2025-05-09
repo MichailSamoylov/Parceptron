@@ -1,10 +1,7 @@
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -17,21 +14,45 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import kotlinx.coroutines.delay
 import parseptron.Parseptron
+import kotlin.random.Random
 
 @Composable
-fun ApplicationScope.visual(parceptron: Parseptron) {
+fun ApplicationScope.visual(
+    parceptron: Parseptron,
+) {
     val windowState = WindowState(placement = WindowPlacement.Maximized)
     Window(
         onCloseRequest = ::exitApplication,
         state = windowState
     ) {
+        var parceptronState by remember { mutableStateOf(1) }
+
         if (windowState.size.height > 0.dp) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Parceptron(
                     height = windowState.size.height,
                     width = windowState.size.width,
-                    parceptron = parceptron
+                    parceptron = parceptron,
+                    parceptronState = parceptronState
                 )
+
+                //testing
+                LaunchedEffect(Unit) {
+                    repeat(10) {
+                        sumDataSet.forEach {
+                            println(
+                                "result: ${
+                                    parceptron.recognize(
+                                        it.first.first,
+                                        it.first.second
+                                    )
+                                }, expected: ${it.second}"
+                            )
+                            parceptronState = Random.nextInt()
+                            delay(2000L)
+                        }
+                    }
+                }
             }
         }
     }
@@ -42,6 +63,7 @@ fun Parceptron(
     height: Dp,
     width: Dp,
     parceptron: Parseptron,
+    parceptronState: Int
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val countOfLayers = 4
@@ -79,6 +101,7 @@ fun Parceptron(
             weightsArray = parceptron.secondLayerWeightsValues,
             nextCenter = sectionWidth / 2 * 7
         )
+        println(parceptronState)
 
         Layer(
             sectionCenter = sectionWidth / 2 * 7,

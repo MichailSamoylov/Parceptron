@@ -3,7 +3,7 @@
  * Первое число input
  * Второй ожидаемый результат
  * Ожидаемый результат 1 или 0 как boolean
-**/
+ **/
 val lineNeuronDataSet = listOf<Pair<Int, Int>>(
     -1 to 0,
     -2 to 0,
@@ -26,4 +26,11 @@ val lineNeuronDataSet = listOf<Pair<Int, Int>>(
     8 to 1,
     9 to 1,
     10 to 1,
+)
+
+val sumDataSet = listOf<Pair<Pair<Int, Int>, Int>>(
+    1 to 1 to 1,
+    1 to 0 to 0,
+    0 to 1 to 0,
+    0 to 0 to 0,
 )
